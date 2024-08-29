@@ -10,7 +10,7 @@
 		"url": "https://github.com/armanio123/BranchBreakpoints.git"
 	},
 	"engines": {
-		"vscode": "^1.46.0"
+		"vscode": "^1.69.0"
 	},
 	"categories": [
 		"Other"
