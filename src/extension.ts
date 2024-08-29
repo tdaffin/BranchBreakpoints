@@ -153,11 +153,11 @@ function getUpdatedBreakpoints(e: BreakpointsChangeEvent, isBranchLocked: boolea
 
 	const index = branchBreakpoints.branch.findIndex(x => x.name === head);
 
-	let branch: Branch = index !== -1
+	const branch: Branch = index !== -1
 		? branchBreakpoints.branch[index]
 		: { name: head, breakpoints: [] };
 
-	for (let breakpoint of e.added) {
+	for (const breakpoint of e.added) {
 		// Add the new breakpoint only if they don't exists yet.
 		const existinBreakpoint = branch.breakpoints.find(x => areBreakpointsEqual(breakpoint, x));
 		if (!existinBreakpoint) {
