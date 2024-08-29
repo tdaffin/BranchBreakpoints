@@ -3,7 +3,7 @@
 	"displayName": "Branch Breakpoints",
 	"description": "Manages breakpoints based on the working git branch.",
 	"author": "Armando Aguirre <araguir@microsoft.com>",
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"publisher": "armanio123",
 	"repository": {
 		"type": "git",
