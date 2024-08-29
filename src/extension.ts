@@ -127,20 +127,22 @@ function createOutputChannel(isTraceEnabled: boolean | undefined): void {
 }
 
 function trace(value: string) {
-	if (outputChannel) {
-		const dateOptions = [{ year: 'numeric' }, { month: '2-digit' }, { day: '2-digit' }];
-		const timeOptions = [{ hour: '2-digit', hour12: false }, { minute: '2-digit' }, { second: '2-digit' }];
+	const dateOptions = [{ year: 'numeric' }, { month: '2-digit' }, { day: '2-digit' }];
+	const timeOptions = [{ hour: '2-digit', hour12: false }, { minute: '2-digit' }, { second: '2-digit' }];
 
-		const date = new Date();
-		// @ts-ignore
-		const dateFormatted = dateOptions.map((option) => new Intl.DateTimeFormat('en', option).format(date)).join('-');
-		// @ts-ignore
-		const timeFormatted = timeOptions.map((option) => new Intl.DateTimeFormat('en', option).format(date)).join(':');
-		// @ts-ignore
-		const millisecondFormatted = new Intl.DateTimeFormat('en', { fractionalSecondDigits: 3 }).format(date);
+	const date = new Date();
+	// @ts-ignore
+	const dateFormatted = dateOptions.map((option) => new Intl.DateTimeFormat('en', option).format(date)).join('-');
+	// @ts-ignore
+	const timeFormatted = timeOptions.map((option) => new Intl.DateTimeFormat('en', option).format(date)).join(':');
+	// @ts-ignore
+	const millisecondFormatted = new Intl.DateTimeFormat('en', { fractionalSecondDigits: 3 }).format(date);
 
-		outputChannel.appendLine(`[${dateFormatted} ${timeFormatted}.${millisecondFormatted}] ${value}`);
-	}
+	const message = `[${dateFormatted} ${timeFormatted}.${millisecondFormatted}] ${value}`;
+	if (outputChannel)
+		outputChannel.appendLine(message);
+	else
+		console.log(message);
 }
 
 function getUpdatedBreakpoints(e: BreakpointsChangeEvent, isBranchLocked: boolean, branchBreakpoints: BranchBreakpoints, head: string): BranchBreakpoints | undefined {
