@@ -75,28 +75,30 @@ export function activate(context: ExtensionContext) {
 	});
 
 	function setBreakpoints() {
-		// Branch needs to get locked and unlocked as it will trigger multiple times the 
+		// Branch needs to get locked and unlocked as it will trigger multiple times the
 		// onDidChangeBreakpoints event.
-		isBranchLocked = true;
+		try {
+			isBranchLocked = true;
 
-		// Remove all breakpoints to then add only the saved ones.
-		trace(`Remove breakpoints: ${JSON.stringify(vscodeDebug.breakpoints)}`);
-		vscodeDebug.removeBreakpoints(vscodeDebug.breakpoints);
+			// Remove all breakpoints to then add only the saved ones.
+			trace(`Remove breakpoints: ${JSON.stringify(vscodeDebug.breakpoints)}`);
+			vscodeDebug.removeBreakpoints(vscodeDebug.breakpoints);
 
-		const branchBreakpoint = branchBreakpoints.branch.find(x => x.name === head);
-		const breakpoints = branchBreakpoint?.breakpoints;
+			const branchBreakpoint = branchBreakpoints.branch.find(x => x.name === head);
+			const breakpoints = branchBreakpoint?.breakpoints;
 
-		if (breakpoints && breakpoints.length !== 0) {
-			for (let i = 0; i < breakpoints.length; i++) {
-				breakpoints[i] = getBreakpoint(breakpoints[i]);
+			if (breakpoints && breakpoints.length !== 0) {
+				for (let i = 0; i < breakpoints.length; i++) {
+					breakpoints[i] = getBreakpoint(breakpoints[i]);
+				}
+
+				vscodeDebug.addBreakpoints(breakpoints);
+
+				trace(`Set breakpoints: ${JSON.stringify(breakpoints)}`);
 			}
-
-			vscodeDebug.addBreakpoints(breakpoints);
-
-			trace(`Set breakpoints: ${JSON.stringify(breakpoints)}`);
+		} finally {
+			isBranchLocked = false;
 		}
-
-		isBranchLocked = false;
 	}
 }
 
