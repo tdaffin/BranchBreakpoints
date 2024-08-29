@@ -1,5 +1,5 @@
-import { Breakpoint, BreakpointsChangeEvent, commands, debug as vscodeDebug, ExtensionContext, FunctionBreakpoint, Location, OutputChannel, Position, Range, SourceBreakpoint, Uri, window, workspace } from 'vscode';
 import * as fs from 'fs';
+import { Breakpoint, BreakpointsChangeEvent, commands, ExtensionContext, FunctionBreakpoint, Location, OutputChannel, Position, Range, SourceBreakpoint, Uri, debug as vscodeDebug, window, workspace } from 'vscode';
 import { areBreakpointsEqual, Branch, BranchBreakpoints, JsonBreakpoint } from './types';
 
 const breakpointMapKeyName = 'breakpointMap';
@@ -28,7 +28,12 @@ export function activate(context: ExtensionContext) {
 
 		// TODO: Check out vscode fs watch instead.
 		fs.watch(headFilename, () => {
-			head = getHead(headFilename);
+			const newHead = getHead(headFilename);
+			if (newHead === head) {
+				trace(`Head not changed: ${head}`);
+				return;
+			}
+			head = newHead;
 			trace(`Using head: ${head}`);
 
 			setBreakpoints();
