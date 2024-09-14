@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import { Breakpoint, BreakpointsChangeEvent, commands, ExtensionContext, FunctionBreakpoint, Location, OutputChannel, Position, Range, SourceBreakpoint, Uri, debug as vscodeDebug, window, workspace } from 'vscode';
-import { areBreakpointsEqual, Branch, BranchBreakpoints, JsonBreakpoint } from './types';
+import { areBreakpointsEqual, Branch, BranchBreakpoints, JsonBreakpoint, toStringRange } from './types';
 
 const breakpointMapKeyName = 'breakpointMap';
 const configurationSection = 'branchBreakpoints';
@@ -12,7 +12,9 @@ export function activate(context: ExtensionContext) {
 	createOutputChannel(workspace.getConfiguration(configurationSection).get(traceConfiguration));
 	trace('Extension activated');
 
-	let branchBreakpoints: BranchBreakpoints = update(context, context.workspaceState.get(breakpointMapKeyName) || getInitialBranchBreakpoints(context));
+	let branchBreakpoints: BranchBreakpoints;
+	let recreated = false;
+	[branchBreakpoints, recreated] = getWorkspaceBreakpoints(context);
 	trace(`Loaded breakpoints: ${JSON.stringify(branchBreakpoints)}`);
 
 	// TODO: Fix headFilename when workspace is `undefined`.
@@ -40,12 +42,17 @@ export function activate(context: ExtensionContext) {
 		});
 	}
 	trace(`Using head: ${head}`);
+	if (recreated) {
+		setBreakpoints();
+		context.workspaceState.update(breakpointMapKeyName, branchBreakpoints);
+		trace(`Branch breakpoints recreated: ${JSON.stringify(branchBreakpoints)}`);
+	}
 
 	const printMapCommand = commands.registerCommand('branchBreakpoints.printMap', () => {
 		trace(`branchBreakpoints: ${JSON.stringify(branchBreakpoints)}`);
 	});
 	const clearMapCommand = commands.registerCommand('branchBreakpoints.clearMap', () => {
-		branchBreakpoints = clearBranchBreakpoints(context, branchBreakpoints)
+		branchBreakpoints = clearBranchBreakpoints(context, branchBreakpoints);
 	});
 
 	context.subscriptions.push(printMapCommand, clearMapCommand);
@@ -80,21 +87,34 @@ export function activate(context: ExtensionContext) {
 		try {
 			isBranchLocked = true;
 
-			// Remove all breakpoints to then add only the saved ones.
-			trace(`Remove breakpoints: ${JSON.stringify(vscodeDebug.breakpoints)}`);
-			vscodeDebug.removeBreakpoints(vscodeDebug.breakpoints);
+			const curBreakpoints = vscodeDebug.breakpoints;
 
 			const branchBreakpoint = branchBreakpoints.branch.find(x => x.name === head);
-			const breakpoints = branchBreakpoint?.breakpoints;
+			const jsonBreakpoints = branchBreakpoint?.breakpoints;
 
-			if (breakpoints && breakpoints.length !== 0) {
-				for (let i = 0; i < breakpoints.length; i++) {
-					breakpoints[i] = getBreakpoint(breakpoints[i]);
+			if (jsonBreakpoints && jsonBreakpoints.length !== 0) {
+				// Make sure all breakpoints from json are instantiated.
+				const newBreakpoints = jsonBreakpoints.map(getBreakpoint);
+
+				// Figure out which breakpoints need to be added and removed.
+				const toRemove = new Array<Breakpoint>();
+				for (const breakpoint of curBreakpoints) {
+					if (!newBreakpoints.find(x => areBreakpointsEqual(breakpoint, x))) {
+						toRemove.push(breakpoint);
+					}
 				}
-
-				vscodeDebug.addBreakpoints(breakpoints);
-
-				trace(`Set breakpoints: ${JSON.stringify(breakpoints)}`);
+				const toAdd = new Array<Breakpoint>();
+				for (const breakpoint of newBreakpoints) {
+					if (!curBreakpoints.find(x => areBreakpointsEqual(breakpoint, x))) {
+						toAdd.push(breakpoint);
+					}
+				}
+				// Add new breakpoints
+				vscodeDebug.addBreakpoints(toAdd);
+				// Remove old breakpoints
+				vscodeDebug.removeBreakpoints(toRemove);
+			} else {
+				trace(`No breakpoints set for ${head}`);
 			}
 		} finally {
 			isBranchLocked = false;
@@ -139,10 +159,11 @@ function trace(value: string) {
 	const millisecondFormatted = new Intl.DateTimeFormat('en', { fractionalSecondDigits: 3 }).format(date);
 
 	const message = `[${dateFormatted} ${timeFormatted}.${millisecondFormatted}] ${value}`;
-	if (outputChannel)
+	if (outputChannel) {
 		outputChannel.appendLine(message);
-	else
+	} else {
 		console.log(message);
+	}
 }
 
 function getUpdatedBreakpoints(e: BreakpointsChangeEvent, isBranchLocked: boolean, branchBreakpoints: BranchBreakpoints, head: string): BranchBreakpoints | undefined {
@@ -195,16 +216,16 @@ function getUpdatedBreakpoints(e: BreakpointsChangeEvent, isBranchLocked: boolea
 	return {
 		version: branchBreakpoints.version,
 		branch: updatedBranches
-	}
+	};
 }
 
 function getBreakpoint(breakpoint: JsonBreakpoint): Breakpoint {
 	if (breakpoint instanceof SourceBreakpoint || breakpoint instanceof FunctionBreakpoint) {
-		trace('Breakpoint already instantiated.')
+		trace('Breakpoint already instantiated.');
 		return breakpoint;
 	}
 
-	trace('Instantiate new breakpoint.')
+	trace('Instantiate new breakpoint.');
 
 	const { enabled, condition, functionName, hitCondition, location, logMessage } = breakpoint;
 
@@ -230,14 +251,88 @@ function getHead(headFilename: string): string {
 	return fs.readFileSync(headFilename).toString();
 }
 
-function update(context: ExtensionContext, branchBreakpoints: BranchBreakpoints): BranchBreakpoints {
+function getWorkspaceBreakpoints(context: ExtensionContext): [BranchBreakpoints, boolean] {
+	let branchBreakpoints: BranchBreakpoints = context.workspaceState.get(breakpointMapKeyName) ?? getInitialBranchBreakpoints(context);
 	if (!branchBreakpoints.version) {
 		const newVersion = '0.0.2'; // Version should match the "next" extension version.
 		branchBreakpoints = clearBranchBreakpoints(context, branchBreakpoints);
-		branchBreakpoints.version = newVersion
+		branchBreakpoints.version = newVersion;
 
 		trace(`Updated to version: ${newVersion}`);
 	}
+	let recreated = false;
+	for (const branch of branchBreakpoints.branch) {
+		const branchName = branch.name.trim();
+		try {
+			const breakpoints = branch.breakpoints;
+			type DuplicateBreakpoints = { breakpoint: JsonBreakpoint, count: number };
+			const locationPathMap = new Map<string, Map<string, DuplicateBreakpoints>>();
+			const functionNameMap = new Map<string, Array<JsonBreakpoint>>();
+			for (const breakpoint of breakpoints) {
+				const loc = breakpoint.location;
+				const func = breakpoint.functionName;
+				if (loc != null && func != null) {
+					trace(`Unexpected location and function both set!`);
+				} else if (loc != null) {
+					const path = loc.uri.path;
+					const range = loc.range;
+					const rangeStr = toStringRange(range);
+					let rangeMap = locationPathMap.get(path);
+					if (rangeMap == null) {
+						rangeMap = new Map<string, DuplicateBreakpoints>();
+						locationPathMap.set(path, rangeMap);
+					}
+					let duplicateBreakpoints = rangeMap.get(rangeStr);
+					if (duplicateBreakpoints == null) {
+						duplicateBreakpoints = { breakpoint, count: 1 };
+					} else {
+						duplicateBreakpoints = { breakpoint, count: duplicateBreakpoints.count + 1 };
+					}
+					rangeMap.set(rangeStr, duplicateBreakpoints);
+				} else if (func != null) {
+					const foundArr = functionNameMap.get(func);
+					if (foundArr == null) {
+						functionNameMap.set(func, [breakpoint]);
+					} else {
+						foundArr.push(breakpoint);
+					}
+				}
+			}
+			trace(`[${branchName}]: Found ${locationPathMap.size} locations and ${functionNameMap.size} functions.`);
+			let needsRecreate = false;
+			for (const [path, rangeMap] of locationPathMap) {
+				for(const [rangeStr, duplicateBreakpoints] of rangeMap) {
+					if (duplicateBreakpoints.count > 1) {
+						trace(`[${branchName}]: Found ${duplicateBreakpoints.count} location breakpoints for ${path} at ${rangeStr}.`);
+						needsRecreate = true;
+					}
+				}
+			}
+			for (const [func, value] of functionNameMap) {
+				if (value.length > 1) {
+					trace(`[${branchName}]: Found ${value.length} function breakpoints for ${func}.`);
+					needsRecreate = true;
+				}
+			}
+			if (needsRecreate) {
+				const newBreakpoints = new Array<Breakpoint>();
+				for (const [path, rangeMap] of locationPathMap) {
+					for (const [rangeStr, duplicateBreakpoints] of rangeMap) {
+						newBreakpoints.push(duplicateBreakpoints.breakpoint);
+					}
+				}
+				for (const [func, funcBreakpoints] of functionNameMap) {
+					newBreakpoints.push(funcBreakpoints[0]);
+				}	
+				branch.breakpoints = newBreakpoints;
+				recreated = true;
+				trace(`[${branchName}]: Recreated breakpoints; reduced from ${breakpoints.length} to ${newBreakpoints.length}.`);
+			}
 
-	return branchBreakpoints;
+		} catch (e) {
+			trace(`Failed to check breakpoints for branch: ${branchName}, ${e}`);
+		}
+	}
+
+	return [branchBreakpoints, recreated];
 }
