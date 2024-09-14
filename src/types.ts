@@ -16,6 +16,7 @@ export interface JsonLocation {
 	range: JsonRange
 }
 
+//FIXME: May be incorrect to extends Breakpoint here -- or maybe should do it as class...
 export interface JsonBreakpoint extends Breakpoint {
 	// SourceBreakpoint or FunctionBreakpoint data
 	location?: JsonLocation;
@@ -28,6 +29,7 @@ export interface BranchBreakpoints {
 }
 
 export type VSCodeBreakpoint = SourceBreakpoint | FunctionBreakpoint | Breakpoint;
+//FIXME: This should probably just be SourceBreakpoint | FunctionBreakpoint
 
 export type Branch = {
 	name: string;
@@ -51,10 +53,12 @@ export function toJsonRange(range: Range): JsonRange {
 }
 
 export function isSourceBreakpoint(breakpoint: VSCodeBreakpoint): breakpoint is SourceBreakpoint {
+	//FIXME: Should use instanceof SourceBreakpoint
 	return (breakpoint as SourceBreakpoint).location !== undefined;
 }
 
 export function isFunctionBreakpoint(breakpoint: VSCodeBreakpoint): breakpoint is FunctionBreakpoint {
+	//FIXME: Should use instanceof FunctionBreakpoint
 	return (breakpoint as FunctionBreakpoint).functionName !== undefined;
 }
 
@@ -68,6 +72,7 @@ export function areRangesEqual(range1: JsonRange, range2: JsonRange): boolean {
 
 export function areBreakpointsEqual(breakpoint1: VSCodeBreakpoint, breakpoint2: VSCodeBreakpoint): boolean {
 	if (isSourceBreakpoint(breakpoint1) && isSourceBreakpoint(breakpoint2)) {
+		// FIXME: Maybe should use toString on uri not path
 		if (breakpoint1.location.uri.path !== breakpoint2.location.uri.path) {
 			return false;
 		}

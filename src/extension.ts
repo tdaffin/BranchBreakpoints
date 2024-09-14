@@ -113,6 +113,13 @@ export function activate(context: ExtensionContext) {
 				vscodeDebug.addBreakpoints(toAdd);
 				// Remove old breakpoints
 				vscodeDebug.removeBreakpoints(toRemove);
+				//FIXME: trace number of unchanged breakpoints
+
+				// Remove all breakpoints to then add only the saved ones.
+				/*trace(`Remove breakpoints: ${JSON.stringify(curBreakpoints)}`);
+				vscodeDebug.removeBreakpoints(curBreakpoints);
+				vscodeDebug.addBreakpoints(newBreakpoints);
+				trace(`Set breakpoints: ${JSON.stringify(newBreakpoints)}`);*/
 			} else {
 				trace(`No breakpoints set for ${head}`);
 			}
@@ -274,6 +281,7 @@ function getWorkspaceBreakpoints(context: ExtensionContext): [BranchBreakpoints,
 				if (loc != null && func != null) {
 					trace(`Unexpected location and function both set!`);
 				} else if (loc != null) {
+					// FIXME: Maybe should use toString on uri not path
 					const path = loc.uri.path;
 					const range = loc.range;
 					const rangeStr = toStringRange(range);
